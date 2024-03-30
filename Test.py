@@ -10,7 +10,7 @@ import numpy as np
 from keras.datasets import mnist
 from matplotlib import pyplot as plt
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten
 
 
 
@@ -37,22 +37,30 @@ def train_shallow_nn_binary_classification(x_train, y_train, nh, alpha, num_iter
     w1 = np.zeros((nh,ny)) # Weights matrix for hidden layer to output layer
     b1 = np.zeros((1,ny))  # Bias vector for hidden layer to output layer
 
+    # Training loop, recursive gradient descent
     for i in range(num_iterations):
 
         # Forward propagation
-        z0 = np.dot(x_train,w0) + b0
-        h = 1 / (1 + np.exp(-z0))
-        z1 = np.dot(h,w1) + b1
-        y_pred = (1 / (1 + np.exp(-z1))).reshape(m_train)
+        z0 = np.dot(x_train,w0) + b0                        # Linear activation function
+        h = 1 / (1 + np.exp(-z0))                           # Sigmoid activation function
+        z1 = np.dot(h,w1) + b1                              # Linear activation function
+        y_pred = (1 / (1 + np.exp(-z1))).reshape(m_train)   # Sigmoid activation function
 
-        # Cost function
+        # Binary cross-entropy cost function
         J = -np.mean(y_train * np.log(y_pred) + (1-y_train) * np.log(1-y_pred))
         if i % 100 == 0:
             print(f'J{i}: {str(J)}')
 
         # Back propagation
 
+        """ Derivatives for the output layer with respect to the cost function
+        y_pred = s(z1)
+        s'(z1)=s(z1)(1-s(z1))
+        J'(y_pred) = -y_train/y_pred + (1-y_train)/(1-y_pred)
+        J'(z1) = J'(y_pred) * s'(z1) = (y_pred - y_train)
+        """
         dz1 = (y_pred - y_train).reshape(m_train,ny)
+        # Divide by m because we are taking the average of the derivatives over all training examples
         dw1 = (np.dot(h.T,dz1) / m_train).reshape(nh,ny)
         db1 = (np.sum(dz1, axis=0) / m_train).reshape(ny,ny)
 
@@ -114,6 +122,20 @@ def test_shallow_nn_multi_classification(x_test, y_test, w0, b0, w1, b1) -> None
 
 
 
+def count_correct_predictions2(y_test, y_pred) -> None:
+    # Display the number of correct and failed predictions for each digit
+    correct = 0
+    failed = 0
+    for i in range(y_test.shape[0]):
+        if y_test[i] == y_pred[i]:
+            correct += 1
+        else:
+            failed += 1
+    print(f"There are {correct} correct predictions and {failed} failed predictions")
+    print(f"{correct*100.0/(correct+failed)}% was predicted correct")
+
+
+
 # Main function
 def main() -> None:
 
@@ -163,11 +185,43 @@ def main() -> None:
     # Evaluate the model
     loss, accuracy = model.evaluate(x_test, y_test)
     print(f'Test loss: {loss}, Test accuracy: {accuracy}')
+    # Test loss: 0.13876304030418396, Test accuracy: 0.9649999737739563
     y_pred = model.predict(x_test)
     count_correct_predictions(y_test, y_pred)
-    # There are 892 digit 5 and 83% was predicted correct
+    # There are 892 digit 5 and 79% was predicted correct
     # There are 9108 not digit 5 and 98% was predicted correct
 
+    # And one more thing, let us try a convolutional neural network with Keras
+    model_cnn = Sequential()
+    model_cnn.add(Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)))
+    model_cnn.add(MaxPooling2D((2, 2)))
+    model_cnn.add(Conv2D(64, (3, 3), activation='relu'))
+    model_cnn.add(MaxPooling2D((2, 2)))
+    model_cnn.add(Flatten())
+    model_cnn.add(Dense(64, activation='relu'))
+    model_cnn.add(Dense(10, activation='softmax'))
+    # sparse_categorical_crossentropy is used for multi-class classification model
+    # where the output label is assigned integer value (0, 1, 2, 3, ...).
+    model_cnn.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    # Reshape the data to include the channel dimension
+    x_train2 = x_train_full.astype('float32') / 255
+    x_train2 = x_train2.reshape(-1, 28, 28, 1)
+    y_train2 = y_train_full
+    x_test2 = x_test_full.astype('float32') / 255
+    x_test2 = x_test2.reshape(-1, 28, 28, 1)
+    y_test2 = y_test_full
+    # Train the model
+    model_cnn.fit(x_train2, y_train2, epochs=5, verbose=1)
+    # Evaluate the model
+    loss, accuracy = model_cnn.evaluate(x_test2, y_test2)
+    print(f'Test loss: {loss}, Test accuracy: {accuracy}')
+    # Test loss: 0.036425113677978516, Test accuracy: 0.9894000291824341
+    y_pred2 = model_cnn.predict(x_test2)
+    y_pred2_classes = y_pred2.argmax(axis=1)
+    count_correct_predictions2(y_test2, y_pred2_classes)
+    # There are 9894 correct predictions and 106 failed predictions
+    # 98.94% was predicted correct
+   
     print("Finished!")
 
 
